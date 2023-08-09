@@ -10,10 +10,10 @@ output: html_document
 ```{python}
 # Adapter removal
 cutadapt -a ADAPTER_FWD -o trimmed.R1.fastq.gz reads1.fastq.gz
-cutadapt -a ADAPTER_REV -o trimmed.R2.fastq.gz reads2.fastq.gz
+cutadapt -a ADAPTER_REV -o trimmed.R2.fastq.gz reads2.fastq.gz 
 
 # Primer removal
-cutadapt -g ^Primer1 -G ^Primer2 -o output_R1.fastq -p output_R2.fastq --discard-untrimmed trimmed.R1.fastq.gz trimmed.R2.fastq.gz
+cutadapt -g ^Primer1 -G ^Primer2 -o output_R1.fastq -p output_R2.fastq --discard-untrimmed trimmed.R1.fastq.gz trimmed.R2.fastq.gz  --quality-base=30
 ``` 
 
 # OTU and taxonomy analysis
@@ -99,8 +99,18 @@ correlation=corr.test(dat1,dat2,use = "pairwise",method="spearman",adjust="none"
 write.table(Res$r,file="Correlation_value_table.txt",sep="\t",quote=FALSE)
 write.table(Res$p,file="Pvalue_table.txt",sep="\t",quote=FALSE)
 
-# Codes for correlation plots
-
+# Codes for correlation 
+library(reshape)
+library(scales)
+library(ggplot2)
+data=read.delim("fc_fh_overall.txt", check.names=FALSE)
+new=melt(data)
+ggplot(data = new, aes(x=variable, y=Genus, fill=value)) + 
+  geom_tile()+
+  scale_fill_gradient2(low = muted("#002814"),  mid = "white", high = "#790000",
+                       midpoint = 0, limit = c(-1,1), space = "Lab", 
+                       name="Correlation value") +
+  theme_minimal()  + theme(axis.text.x = element_text(angle = 90, hjust = 1),axis.title.x = element_blank(),axis.title.y = element_blank())
 ```
 
 # Graphlan plot (Figure 3B)
