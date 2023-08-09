@@ -99,11 +99,11 @@ correlation=corr.test(dat1,dat2,use = "pairwise",method="spearman",adjust="none"
 write.table(Res$r,file="Correlation_value_table.txt",sep="\t",quote=FALSE)
 write.table(Res$p,file="Pvalue_table.txt",sep="\t",quote=FALSE)
 
-# Codes for correlation 
+# Codes for correlation plots
 library(reshape)
 library(scales)
 library(ggplot2)
-data=read.delim("fc_fh_overall.txt", check.names=FALSE)
+data=read.delim("table.txt", check.names=FALSE)
 new=melt(data)
 ggplot(data = new, aes(x=variable, y=Genus, fill=value)) + 
   geom_tile()+
@@ -111,6 +111,7 @@ ggplot(data = new, aes(x=variable, y=Genus, fill=value)) +
                        midpoint = 0, limit = c(-1,1), space = "Lab", 
                        name="Correlation value") +
   theme_minimal()  + theme(axis.text.x = element_text(angle = 90, hjust = 1),axis.title.x = element_blank(),axis.title.y = element_blank())
+
 ```
 
 # Graphlan plot (Figure 3B)
