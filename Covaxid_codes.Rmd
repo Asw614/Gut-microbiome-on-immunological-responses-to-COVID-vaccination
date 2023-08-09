@@ -1,0 +1,148 @@
+---
+title: "Impact of the gut microbiome on immunological responses to COVID-19 vaccination in healthy controls and people living with HIV"
+author: "Aswathy Narayanan"
+date: '2023-08-09'
+output: html_document
+---
+
+# Pre-processing
+
+```{python}
+# Adapter removal
+cutadapt -a ADAPTER_FWD -o trimmed.R1.fastq.gz reads1.fastq.gz
+cutadapt -a ADAPTER_REV -o trimmed.R2.fastq.gz reads2.fastq.gz
+
+# Primer removal
+cutadapt -g ^Primer1 -G ^Primer2 -o output_R1.fastq -p output_R2.fastq --discard-untrimmed trimmed.R1.fastq.gz trimmed.R2.fastq.gz
+``` 
+
+# OTU and taxonomy analysis
+
+```{python}
+# The QIIME2 command for importing the file
+qiime tools import \
+--type 'SampleData[PairedEndSequencesWithQuality]' \
+--input-path manifest_file.tsv \
+--output-path paired-end-demux.qza \
+--input-format PairedEndFastqManifestPhred33V2
+
+qiime demux summarize \
+--i-data paired-end-demux.qza \
+--o-visualization demux.qzv
+
+# DADA2 plug-in
+qiime dada2 denoise-paired \
+--i-demultiplexed-seqs paired-end-demux.qza \
+--o-table table.qza \
+--o-representative-sequences rep-seqs.qza \
+--o-denoising-stats denoising-stats.qza
+
+# Taxonomy classification using SILVAv132
+
+qiime feature-classifier classify-sklearn \
+  --i-classifier  silvav132-classifier.qza \
+  --i-reads rep-seqs.qza \
+  --o-classification taxonomy.qza
+``` 
+
+# Alpha and beta analysis
+
+```{r setup, include=FALSE}
+library(phyloseq)
+ASV<- read.delim("otu.txt", check.names=FALSE, row.names=1)
+taxmat<- read.delim("tax.txt", check.names=FALSE, row.names=1)
+taxonomy=as.matrix(taxmat)	
+TAX = tax_table(taxonomy)
+otumat<-data.matrix(ASV, rownames.force = NA)
+OTU = otu_table(otumat, taxa_are_rows = TRUE)
+sample=read.delim("meta.txt",check.names=FALSE,row.names=1)
+Sample=sample_data(sample)
+physeq=phyloseq(OTU,TAX,Sample)
+richness=estimate_richness(physeq, split = TRUE, measures = c("Observed","Shannon","Simpson"))
+
+# Alpha diversity boxplot
+library(reshape)
+library(ggplot2)
+library(ggpubr)
+data=read.delim("alpha.txt",check.names=FALSE)
+dat=melt(data)
+ggplot(dat, aes(x = samples, y = value)) + geom_boxplot(aes(fill = samples), alpha = 0.95, outlier.shape=NA) + facet_wrap(~variable,scale="free",nrow=1) + theme_bw() + theme(strip.text.x = element_text(size = 13), axis.title.x=element_blank(), axis.text.x=element_blank(),axis.ticks.x=element_blank(),axis.title.y=element_blank(), legend.text=element_text(size=7, family="Times"),plot.title = element_text(size = 10),legend.title=element_blank()) + scale_fill_manual(values=c("#ff8364","#5ca0d3")) + stat_compare_means(method="wilcox.test",paired = FALSE,label = "p.format")
+
+# Beta diversity plot
+sample_data(physeq)[ , 2] <- sample_data(physeq)[ ,1]
+ps.prop <- transform_sample_counts(physeq, function(otu) otu/sum(otu))
+ord.nmds.bray <- ordinate(ps.prop, method="NMDS", distance="bray")
+allGroupsColors<- c("#ff8364","#5ca0d3")
+plot_ordination(ps.prop, ord.nmds.bray, color="Group", title="Bray NMDS")+ geom_point(size = 3.5)+ scale_color_manual(values = allGroupsColors)+ scale_shape_manual(values = c(19, 1)) + theme_bw()
+```
+
+# Linear discriminant analysis Effect Size (Lefse) and LDA plot
+```{python}
+format_input.py Input.txt Input_LDA.in -c 1 -u 2  -o 1000000
+run_lefse.py Input_LDA.in output_LDA.res -a 0.05
+
+# codes for LDA plot
+library(ggplot2)
+data=read.delim("lda_output.txt",check.names=FALSE) 
+ggplot(data=data, aes(x= factor(x, levels=unique(x)), 
+y=LDA, fill=Group))+geom_bar(stat="identity")+coord_flip()+theme(axis.title.y=element_blank(),plot.title = element_text(hjust = 0.5), plot.margin = unit(c(3,3,3,3), "cm"))+ ggtitle("Control-vs-Case") + scale_fill_manual(values = c("#eeba30","#008000")) + ylab("LDA Score (log10)")
+```
+
+# Correlation plots
+```{r setup, include=FALSE}
+data1=read.delim("table1.txt",check.names=FALSE)
+data2=read.delim("table2.txt",check.names=FALSE)
+dat1=as.matrix(data1)
+dat2=as.matrix(data2)
+library(psych)
+correlation=corr.test(dat1,dat2,use = "pairwise",method="spearman",adjust="none")
+write.table(Res$r,file="Correlation_value_table.txt",sep="\t",quote=FALSE)
+write.table(Res$p,file="Pvalue_table.txt",sep="\t",quote=FALSE)
+
+# Codes for correlation plots
+
+```
+
+# Graphlan plot (Figure 3B)
+
+```{python}
+## Figure 3b: Taxonomic tree of bacterial taxa
+
+export2graphlan.py -i abundance_table.txt --annotations 5,6  --skip_rows 1,2  --tree tree.txt --annotation annotation.txt
+graphlan_annotate.py --annot annotation.txt tree.txt Plot.xml
+graphlan.py Plot.xml Plot.pdf --dpi 500 --size 15
+```
+
+# DESeq2 analysis
+
+```{r setup, include=FALSE}
+
+library(phyloseq)
+ASV<- read.delim("otu_phy_bmi.txt", check.names=FALSE, row.names=1)
+taxmat<- read.delim("tax_phy.txt", check.names=FALSE, row.names=1)
+taxonomy=as.matrix(taxmat)  
+TAX = tax_table(taxonomy)
+otumat<-data.matrix(ASV, rownames.force = NA)
+OTU = otu_table(otumat, taxa_are_rows = TRUE)
+sample=read.delim("data_bmi.txt",check.names=FALSE,row.names=1)
+Sample=sample_data(sample)
+physeq=phyloseq(OTU,TAX,Sample)
+physeq
+library("DESeq2")
+packageVersion("DESeq2")
+diagdds = phyloseq_to_deseq2(physeq, ~ Group)
+diagdds = DESeq(diagdds, test="Wald", fitType="parametric")
+
+diagdds = phyloseq_to_deseq2(physeq, design <- ~ variable1 + variable2 + variable3 + variable4)
+diagdds = DESeq(diagdds, test="Wald", fitType="parametric")
+res = results(diagdds, cooksCutoff = FALSE)
+```
+
+# Multivariate regression analysis
+
+```{r setup, include=FALSE}
+data <- read.delim("metadata_file.txt", check.names = FALSE)
+mlm <- lm(var1 ~ var2 + var3 + var4 + var5 + var6, data = data)
+summary(mlm)
+```
+
